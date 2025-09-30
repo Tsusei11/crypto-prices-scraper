@@ -3,22 +3,40 @@ pub mod kucoin;
 pub mod bybit;
 
 pub use binance::Binance;
+pub use kucoin::KuCoin;
+pub use bybit::ByBit;
 pub use traits::Exchange;
 
 pub mod traits {
+    use std::collections::HashMap;
     use tokio::net::TcpStream;
     use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
-    use anyhow::Result;
+    use anyhow::{bail, Result};
     use futures_util::stream::{SplitSink, SplitStream};
     use futures_util::StreamExt;
+    use serde_json::Value;
+    use tokio_tungstenite::tungstenite::handshake::client::Request;
     use tokio_tungstenite::tungstenite::Message;
+    use url::Url;
 
     // DTO for orderbook
+    #[derive(Debug)]
     pub struct Orderbook {
         pub exchange: String,
         pub symbol: String,
         pub bid: f64,
         pub ask: f64,
+    }
+    
+    impl Orderbook {
+        pub fn new(exchange: &str, symbol: &str, bid: &str, ask: &str) -> Orderbook {
+            Self {
+                exchange: exchange.to_string(),
+                symbol: symbol.to_string(),
+                bid: bid.parse::<f64>().unwrap_or(-1.0),
+                ask: ask.parse::<f64>().unwrap_or(-1.0),
+            }
+        }
     }
 
     // Trait for
@@ -31,17 +49,14 @@ pub mod traits {
         fn url() -> &'static str;
 
         // Return url with orderbook subscription for given markets
-        fn orderbook_subscription_url(markets: Vec<String>) -> String;
-
-        fn new(
-            read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-            write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>
-        ) -> Self;
+        fn orderbook_subscription_url(_: Vec<String>) -> Result<Request> {
+            bail!("No subscription url available for {}", Self::name());
+        }
 
         // Returns an instance of an exchange with opened websocket connection with certain subscription
-        async fn connect_with_subscription_async(subscription: String) -> Result<Self> {
+        async fn connect_with_subscription_async(markets: Vec<String>) -> Result<Self> {
+            let subscription = Self::orderbook_subscription_url(markets)?;
             let (ws_stream, _) = connect_async(subscription).await?;
-
             let (write_stream,
                 read_stream) = ws_stream.split();
 
@@ -51,7 +66,7 @@ pub mod traits {
         }
 
         // Returns a vector of orderbooks parsed from websocket server message
-        async fn parse_orderbook_data(data: String) -> Result<Vec<Orderbook>>;
+        fn parse_orderbook_data(raw_data: &HashMap<String, Value>) -> Option<Orderbook>;
 
         // Getters and setters for r/w streams fields
         fn read_stream(&mut self) -> &mut SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
@@ -61,5 +76,11 @@ pub mod traits {
         fn set_read_stream(&mut self, stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>);
 
         fn set_write_stream(&mut self, stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>);
+        
+        // Constructor
+        fn new(
+            read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+            write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>
+        ) -> Self;
     }
 }

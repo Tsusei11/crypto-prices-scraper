@@ -1,12 +1,13 @@
 mod exchange;
 mod utils;
 
-use std::error::Error;
+use std::collections::HashMap;
 use dotenv::dotenv;
 use futures_util::StreamExt;
 use rustls::crypto::ring;
+use serde_json::Value;
 use tokio_tungstenite::tungstenite::Message;
-use crate::exchange::{Binance, Exchange};
+use crate::exchange::{Exchange, ByBit};
 use crate::utils::load_markets;
 
 #[tokio::main]
@@ -14,17 +15,27 @@ async fn main() {
     ring::default_provider().install_default().unwrap();
     dotenv().ok();
 
-    let mut binance = Binance::connect_with_subscription_async(
-        Binance::orderbook_subscription_url(load_markets().unwrap()),
-    ).await.unwrap();
+    let mut bybit = ByBit::connect_with_subscription_async(
+        load_markets(ByBit::name()).expect("Unable to load markets")
+    ).await.expect("Error connecting to bybit");
 
     loop {
-        let stream = binance.read_stream();
+        let stream = bybit.read_stream();
         if let Some(msg) = (*stream).next().await {
             match msg {
                 Ok(msg) => {
                     if let Message::Text(text) = msg {
-                        println!("{}", text);
+                        match serde_json::from_str::<HashMap<String, Value>>(&text) {
+                            Ok(data) => {
+                                if let Some(orderbook) = ByBit::parse_orderbook_data(&data) {
+                                    println!("{:?}", orderbook);
+                                }
+                            },
+                            Err(e) => {
+                                eprintln!("Error parsing orderbook data: {}", e);
+                            }
+                        }
+                        // println!("{}", text)
                     }
                 },
                 Err(e) => {
