@@ -91,14 +91,6 @@ impl Exchange for ByBit {
         &mut self.write_stream
     }
 
-    fn set_read_stream(&mut self, stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>) {
-        self.read_stream = stream;
-    }
-
-    fn set_write_stream(&mut self, stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>) {
-        self.write_stream = stream;
-    }
-
     fn new(read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>, write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>) -> Self {
         Self { read_stream, write_stream }
     }

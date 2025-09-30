@@ -15,7 +15,6 @@ pub mod traits {
     use futures_util::stream::{SplitSink, SplitStream};
     use futures_util::StreamExt;
     use serde_json::Value;
-    use tokio_tungstenite::tungstenite::handshake::client::Request;
     use tokio_tungstenite::tungstenite::Message;
     use url::Url;
 
@@ -27,7 +26,7 @@ pub mod traits {
         pub bid: f64,
         pub ask: f64,
     }
-    
+
     impl Orderbook {
         pub fn new(exchange: &str, symbol: &str, bid: &str, ask: &str) -> Orderbook {
             Self {
@@ -73,10 +72,6 @@ pub mod traits {
 
         fn write_stream(&mut self) -> &mut SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
 
-        fn set_read_stream(&mut self, stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>);
-
-        fn set_write_stream(&mut self, stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>);
-        
         // Constructor
         fn new(
             read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,

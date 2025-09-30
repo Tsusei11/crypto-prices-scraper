@@ -4,7 +4,6 @@ use tokio::net::TcpStream;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use crate::exchange::traits::{Exchange, Orderbook};
 use serde_json::Value;
-use tokio_tungstenite::tungstenite::handshake::client::Request;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 use anyhow::Result;
@@ -65,14 +64,6 @@ impl Exchange for Binance {
 
     fn write_stream(&mut self) -> &mut SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message> {
         &mut self.write_stream
-    }
-
-    fn set_read_stream(&mut self, stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>) {
-        self.read_stream = stream;
-    }
-
-    fn set_write_stream(&mut self, stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>) {
-        self.write_stream = stream;
     }
 
     fn new(
