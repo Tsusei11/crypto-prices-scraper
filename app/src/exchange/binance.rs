@@ -23,38 +23,40 @@ impl Exchange for Binance {
         "wss://stream.binance.com/stream"
     }
 
-    fn orderbook_subscription_url(markets: Vec<String>) -> Result<Request> {
+    fn orderbook_subscription_url(markets: Vec<String>) -> Result<Url> {
         let url = Url::parse_with_params(
             Self::url(),
             &[("streams", markets.join("@bookTicker/") + "@bookTicker")]
         )?;
-        
-        let request = Request::builder().uri(url.as_str()).body(())?;
-        Ok(request)
+
+        Ok(url)
     }
 
     fn parse_orderbook_data(raw_data: &HashMap<String, Value>) -> Option<Orderbook> {
-        if let Some(data) = raw_data.get("data") {
+        let data = raw_data
+            .get("data")?
+            .as_object()?;
 
-            if let Some(map) = data.as_object(){
+        let symbol = data
+            .get("s")?
+            .as_str()?;
 
-                if let (Some(raw_bid), Some(raw_ask), Some(raw_s)) = (map.get("b"), map.get("a"), map.get("s")) {
+        let bid = data
+            .get("b")?
+            .as_str()?;
 
-                    if let (Some(bid), Some(ask), Some(symbol)) =
-                        (raw_bid.as_str(), raw_ask.as_str(), raw_s.as_str()) {
+        let ask = data
+            .get("a")?
+            .as_str()?;
 
-                        return Some(Orderbook::new(
-                            Self::name(),
-                            symbol,
-                            bid,
-                            ask
-                        ));
-                    }
-                }
-            }
-        }
-
-        None
+        Some(
+            Orderbook::new(
+                Self::name(),
+                symbol,
+                bid,
+                ask
+            )
+        )
     }
 
     fn read_stream(&mut self) -> &mut SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>> {

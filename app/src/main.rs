@@ -7,7 +7,7 @@ use futures_util::StreamExt;
 use rustls::crypto::ring;
 use serde_json::Value;
 use tokio_tungstenite::tungstenite::Message;
-use crate::exchange::{Exchange, ByBit};
+use crate::exchange::{Exchange, ByBit, KuCoin, Binance};
 use crate::utils::load_markets;
 
 #[tokio::main]
@@ -15,12 +15,12 @@ async fn main() {
     ring::default_provider().install_default().unwrap();
     dotenv().ok();
 
-    let mut bybit = ByBit::connect_with_subscription_async(
+    let mut exchange = ByBit::connect_with_subscription_async(
         load_markets(ByBit::name()).expect("Unable to load markets")
-    ).await.expect("Error connecting to bybit");
+    ).await.expect("Error connecting to exchange");
 
     loop {
-        let stream = bybit.read_stream();
+        let stream = exchange.read_stream();
         if let Some(msg) = (*stream).next().await {
             match msg {
                 Ok(msg) => {

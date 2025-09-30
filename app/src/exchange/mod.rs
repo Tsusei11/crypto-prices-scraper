@@ -49,14 +49,14 @@ pub mod traits {
         fn url() -> &'static str;
 
         // Return url with orderbook subscription for given markets
-        fn orderbook_subscription_url(_: Vec<String>) -> Result<Request> {
+        fn orderbook_subscription_url(_: Vec<String>) -> Result<Url> {
             bail!("No subscription url available for {}", Self::name());
         }
 
         // Returns an instance of an exchange with opened websocket connection with certain subscription
         async fn connect_with_subscription_async(markets: Vec<String>) -> Result<Self> {
             let subscription = Self::orderbook_subscription_url(markets)?;
-            let (ws_stream, _) = connect_async(subscription).await?;
+            let (ws_stream, _) = connect_async(subscription.to_string()).await?;
             let (write_stream,
                 read_stream) = ws_stream.split();
 

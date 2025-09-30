@@ -88,43 +88,37 @@ impl Exchange for KuCoin {
     }
 
     fn parse_orderbook_data(raw_data: &HashMap<String, Value>) -> Option<Orderbook> {
+        let symbol = raw_data
+            .get("topic")?
+            .as_str()?
+            .split(":")
+            .collect::<Vec<&str>>()[1]
+            .replace("-", "");
 
-        if let Some(topic) = raw_data.get("topic") {
+        let data = raw_data
+            .get("data")?
+            .as_object()?;
 
-            if let Some(symbol) = topic.as_str() {
-                let symbol = symbol
-                    .split(":")
-                    .collect::<Vec<&str>>()[1]
-                    .replace("-", "");
+        let bid = data
+            .get("bids")?
+            .as_array()?
+            .get(0)?
+            .as_str()?;
 
-                if let Some(data) = raw_data.get("data") {
+        let ask = data
+            .get("asks")?
+            .as_array()?
+            .get(0)?
+            .as_str()?;
 
-                    if let Some(data_map) = data.as_object() {
-
-                        if let (Some(bids), Some(asks)) = (data_map.get("bids"), data_map.get("asks")) {
-
-                            if let (Some(bids), Some(asks)) = (bids.as_array(), asks.as_array()) {
-
-                                if let (Some(bid), Some(ask)) = (bids.get(0), asks.get(0)) {
-
-                                    if let (Some(bid), Some(ask)) = (bid.as_str(), ask.as_str()) {
-
-                                        return Some(Orderbook::new(
-                                            Self::name(),
-                                            symbol.as_str(),
-                                            bid,
-                                            ask
-                                        ))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        None
+        Some(
+            Orderbook::new(
+                Self::name(),
+                symbol.as_str(),
+                bid,
+                ask
+            )
+        )
     }
 
     fn read_stream(&mut self) -> &mut SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>> {

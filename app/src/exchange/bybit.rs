@@ -49,40 +49,38 @@ impl Exchange for ByBit {
     }
 
     fn parse_orderbook_data(raw_data: &HashMap<String, Value>) -> Option<Orderbook> {
-        if let Some(data) = raw_data.get("data") {
+        let data = raw_data
+            .get("data")?
+            .as_object()?;
 
-            if let Some(data_map) = data.as_object() {
+        let symbol = data
+            .get("s")?
+            .as_str()?;
 
-                if let (Some(raw_s), Some(bids), Some(asks)) =
-                    (data_map.get("s"), data_map.get("b"), data_map.get("a")) {
+        let bid = data
+            .get("b")?
+            .as_array()?
+            .get(0)?
+            .as_array()?
+            .get(0)?
+            .as_str()?;
 
-                    if let (Some(symbol), Some(bids), Some(asks))
-                        = (raw_s.as_str(), bids.as_array(), asks.as_array()) {
+        let ask = data
+            .get("a")?
+            .as_array()?
+            .get(0)?
+            .as_array()?
+            .get(0)?
+            .as_str()?;
 
-                        if let (Some(bids), Some(asks)) = (bids.get(0), asks.get(0)) {
-
-                            if let (Some(bids), Some(asks)) = (bids.as_array(), asks.as_array()) {
-
-                                if let (Some(bids), Some(asks)) = (bids.get(0), asks.get(0)) {
-
-                                    if let (Some(bid), Some(ask)) = (bids.as_str(), asks.as_str()) {
-
-                                        return Some(Orderbook::new(
-                                            Self::name(),
-                                            symbol,
-                                            bid,
-                                            ask
-                                        ))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        None
+        Some(
+            Orderbook::new(
+                Self::name(),
+                symbol,
+                bid,
+                ask
+            )
+        )
     }
 
     fn read_stream(&mut self) -> &mut SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>> {
