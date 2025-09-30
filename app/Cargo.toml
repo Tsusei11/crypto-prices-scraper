@@ -5,3 +5,8 @@ edition = "2024"
 
 [dependencies]
 dotenv = "0.15.0"
+tokio-tungstenite = { version = "0.28.0", features = ["rustls-tls-webpki-roots"] }
+tokio = { version = "1.47.1", features = ["rt", "rt-multi-thread", "macros"] }
+futures-util = "0.3.31"
+rustls = { version = "0.23.32", features = ["ring"] }
+anyhow = "1.0.100"
