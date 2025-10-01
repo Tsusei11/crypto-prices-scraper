@@ -52,7 +52,7 @@ impl Exchange for KuCoin {
         "wss://ws-api-spot.kucoin.com/"
     }
 
-    async fn connect_with_subscription_async(markets: Vec<String>) -> Result<Self> {
+    async fn connect_with_subscription_async(markets: Vec<String>) -> Result<Box<Self>> {
         let token = Self::get_public_token().await?;
         let url = Url::parse_with_params(
             Self::url(),
@@ -80,10 +80,7 @@ impl Exchange for KuCoin {
         write_stream.send(Message::text(msg.to_string())).await?;
 
         Ok(
-            Self {
-                read_stream,
-                write_stream
-            }
+            Self::new(read_stream, write_stream)
         )
     }
 
@@ -129,10 +126,18 @@ impl Exchange for KuCoin {
         &mut self.write_stream
     }
 
+    fn set_read_stream(&mut self, stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>) {
+        self.read_stream = stream;
+    }
+
+    fn set_write_stream(&mut self, stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>) {
+        self.write_stream = stream;
+    }
+
     fn new(
         read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
         write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>
-    ) -> Self {
-        Self { read_stream, write_stream }
+    ) -> Box<Self> {
+        Box::new(Self { read_stream, write_stream })
     }
 }

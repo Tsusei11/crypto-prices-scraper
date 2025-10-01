@@ -23,7 +23,7 @@ impl Exchange for ByBit {
         "wss://stream.bybit.com/v5/public/spot"
     }
 
-    async fn connect_with_subscription_async(markets: Vec<String>) -> Result<Self> {
+    async fn connect_with_subscription_async(markets: Vec<String>) -> Result<Box<Self>> {
         let (ws_stream, _) = connect_async(Self::url()).await?;
         let (mut write_stream,
             read_stream) = ws_stream.split();
@@ -41,10 +41,7 @@ impl Exchange for ByBit {
         write_stream.send(Message::text(msg.to_string())).await?;
 
         Ok(
-            Self {
-                read_stream,
-                write_stream
-            }
+            Self::new(read_stream, write_stream)
         )
     }
 
@@ -91,7 +88,18 @@ impl Exchange for ByBit {
         &mut self.write_stream
     }
 
-    fn new(read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>, write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>) -> Self {
-        Self { read_stream, write_stream }
+    fn set_read_stream(&mut self, stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>) {
+        self.read_stream = stream;
+    }
+
+    fn set_write_stream(&mut self, stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>) {
+        self.write_stream = stream;
+    }
+
+    fn new(
+        read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+        write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>
+    ) -> Box<Self> {
+        Box::new(Self { read_stream, write_stream })
     }
 }

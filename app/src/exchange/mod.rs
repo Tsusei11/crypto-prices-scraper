@@ -39,7 +39,7 @@ pub mod traits {
     }
 
     // Trait for
-    pub trait Exchange: Sized {
+    pub trait Exchange {
         
         // Returns the name of an exchange
         fn name() -> &'static str;
@@ -53,7 +53,7 @@ pub mod traits {
         }
 
         // Returns an instance of an exchange with opened websocket connection with certain subscription
-        async fn connect_with_subscription_async(markets: Vec<String>) -> Result<Self> {
+        async fn connect_with_subscription_async(markets: Vec<String>) -> Result<Box<Self>> {
             let subscription = Self::orderbook_subscription_url(markets)?;
             let (ws_stream, _) = connect_async(subscription.to_string()).await?;
             let (write_stream,
@@ -71,11 +71,15 @@ pub mod traits {
         fn read_stream(&mut self) -> &mut SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
 
         fn write_stream(&mut self) -> &mut SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
-
+        
+        fn set_read_stream(&mut self, stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>);
+        
+        fn set_write_stream(&mut self, stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>);
+        
         // Constructor
         fn new(
             read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
             write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>
-        ) -> Self;
+        ) -> Box<Self>;
     }
 }
