@@ -4,6 +4,7 @@ mod engine;
 
 use dotenv::dotenv;
 use futures_util::stream::{SplitSink, SplitStream};
+use pprof::ProfilerGuard;
 use rustls::crypto::ring;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
@@ -18,6 +19,7 @@ type WriteStream = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message
 async fn main() {
     ring::default_provider().install_default().unwrap();
     dotenv().ok();
+    let guard = ProfilerGuard::new(50).unwrap();
 
     let mut engine = Engine::new();
 
@@ -25,5 +27,18 @@ async fn main() {
     engine.connect_to(ByBit::new()).await;
     engine.connect_to(KuCoin::new()).await;
 
-    Engine::read_all_orderbooks(engine.exchanges).await;
+    let read_task = tokio::spawn(async move {
+        Engine::read_all_orderbooks(engine.exchanges)
+        .await
+    });
+
+    let profiler_task = tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        if let Ok(report) = guard.report().build() {
+            let mut file = std::fs::File::create("report.svg").unwrap();
+            report.flamegraph(&mut file).unwrap();
+        }
+    });
+
+    tokio::try_join!(read_task, profiler_task).expect("Error joining tasks");
 }
