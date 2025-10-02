@@ -1,30 +1,31 @@
 use std::collections::HashMap;
 use anyhow::Result;
-use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
-use tokio::net::TcpStream;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 use crate::exchange::Exchange;
-use crate::exchange::traits::Orderbook;
+use crate::exchange::structs::Orderbook;
+use crate::{ReadStream, WriteStream};
+use crate::exchange::traits::Connectable;
 
 pub struct ByBit {
-    read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-    write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>
+    read_stream: Option<ReadStream>,
+    write_stream: Option<WriteStream>
 }
 
-impl Exchange for ByBit {
-    fn name() -> &'static str {
-        "ByBit"
+impl ByBit {
+    pub(crate) fn new() -> Self {
+        Self {
+            read_stream: None,
+            write_stream: None
+        }
     }
+}
 
-    fn url() -> &'static str {
-        "wss://stream.bybit.com/v5/public/spot"
-    }
-
-    async fn connect_with_subscription_async(markets: Vec<String>) -> Result<Box<Self>> {
-        let (ws_stream, _) = connect_async(Self::url()).await?;
+impl Connectable for ByBit {
+    async fn connect_with_subscription_async(&mut self, markets: Vec<String>) -> Result<()> {
+        let (ws_stream, _) = connect_async(self.url()).await?;
         let (mut write_stream,
             read_stream) = ws_stream.split();
 
@@ -40,12 +41,23 @@ impl Exchange for ByBit {
 
         write_stream.send(Message::text(msg.to_string())).await?;
 
-        Ok(
-            Self::new(read_stream, write_stream)
-        )
+        self.set_read_stream(read_stream);
+        self.set_write_stream(write_stream);
+
+        Ok(())
+    }
+}
+
+impl Exchange for ByBit {
+    fn name(&self) -> &'static str {
+        "ByBit"
     }
 
-    fn parse_orderbook_data(raw_data: &HashMap<String, Value>) -> Option<Orderbook> {
+    fn url(&self) -> &'static str {
+        "wss://stream.bybit.com/v5/public/spot"
+    }
+
+    fn parse_orderbook_data(&self, raw_data: &HashMap<String, Value>) -> Option<Orderbook> {
         let data = raw_data
             .get("data")?
             .as_object()?;
@@ -72,7 +84,7 @@ impl Exchange for ByBit {
 
         Some(
             Orderbook::new(
-                Self::name(),
+                self.name(),
                 symbol,
                 bid,
                 ask
@@ -80,26 +92,19 @@ impl Exchange for ByBit {
         )
     }
 
-    fn read_stream(&mut self) -> &mut SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+    fn read_stream(&mut self) -> &mut Option<ReadStream>{
         &mut self.read_stream
     }
 
-    fn write_stream(&mut self) -> &mut SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message> {
+    fn write_stream(&mut self) -> &mut Option<WriteStream> {
         &mut self.write_stream
     }
 
-    fn set_read_stream(&mut self, stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>) {
-        self.read_stream = stream;
+    fn set_read_stream(&mut self, stream: ReadStream) {
+        self.read_stream = Some(stream);
     }
 
-    fn set_write_stream(&mut self, stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>) {
-        self.write_stream = stream;
-    }
-
-    fn new(
-        read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-        write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>
-    ) -> Box<Self> {
-        Box::new(Self { read_stream, write_stream })
+    fn set_write_stream(&mut self, stream: WriteStream) {
+        self.write_stream = Some(stream);
     }
 }

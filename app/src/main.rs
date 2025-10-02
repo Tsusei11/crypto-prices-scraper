@@ -1,47 +1,29 @@
 mod exchange;
 mod utils;
+mod engine;
 
-use std::collections::HashMap;
 use dotenv::dotenv;
-use futures_util::StreamExt;
+use futures_util::stream::{SplitSink, SplitStream};
 use rustls::crypto::ring;
-use serde_json::Value;
+use tokio::net::TcpStream;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use tokio_tungstenite::tungstenite::Message;
-use crate::exchange::{Exchange, ByBit, KuCoin, Binance};
-use crate::utils::load_markets;
+use crate::exchange::{ByBit, KuCoin, Binance};
+use crate::engine::Engine;
+
+type ReadStream = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
+type WriteStream = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
 
 #[tokio::main]
 async fn main() {
     ring::default_provider().install_default().unwrap();
     dotenv().ok();
 
-    let mut exchange = ByBit::connect_with_subscription_async(
-        load_markets(ByBit::name()).expect("Unable to load markets")
-    ).await.expect("Error connecting to exchange");
+    let mut engine = Engine::new();
 
-    loop {
-        let stream = exchange.read_stream();
-        if let Some(msg) = (*stream).next().await {
-            match msg {
-                Ok(msg) => {
-                    if let Message::Text(text) = msg {
-                        match serde_json::from_str::<HashMap<String, Value>>(&text) {
-                            Ok(data) => {
-                                if let Some(orderbook) = ByBit::parse_orderbook_data(&data) {
-                                    println!("{:?}", orderbook);
-                                }
-                            },
-                            Err(e) => {
-                                eprintln!("Error parsing orderbook data: {}", e);
-                            }
-                        }
-                        // println!("{}", text)
-                    }
-                },
-                Err(e) => {
-                    println!("Error receiving message: {}", e);
-                }
-            }
-        }
-    }
+    engine.connect_to(Binance::new()).await;
+    engine.connect_to(ByBit::new()).await;
+    engine.connect_to(KuCoin::new()).await;
+
+    Engine::read_all_orderbooks(engine.exchanges).await;
 }

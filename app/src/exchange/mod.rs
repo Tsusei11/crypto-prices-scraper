@@ -1,6 +1,7 @@
 pub mod binance;
 pub mod kucoin;
 pub mod bybit;
+pub mod structs;
 
 pub use binance::Binance;
 pub use kucoin::KuCoin;
@@ -9,77 +10,52 @@ pub use traits::Exchange;
 
 pub mod traits {
     use std::collections::HashMap;
-    use tokio::net::TcpStream;
-    use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+    use tokio_tungstenite::connect_async;
     use anyhow::{bail, Result};
-    use futures_util::stream::{SplitSink, SplitStream};
     use futures_util::StreamExt;
     use serde_json::Value;
-    use tokio_tungstenite::tungstenite::Message;
     use url::Url;
-
-    // DTO for orderbook
-    #[derive(Debug)]
-    pub struct Orderbook {
-        pub exchange: String,
-        pub symbol: String,
-        pub bid: f64,
-        pub ask: f64,
-    }
-
-    impl Orderbook {
-        pub fn new(exchange: &str, symbol: &str, bid: &str, ask: &str) -> Orderbook {
-            Self {
-                exchange: exchange.to_string(),
-                symbol: symbol.to_string(),
-                bid: bid.parse::<f64>().unwrap_or(-1.0),
-                ask: ask.parse::<f64>().unwrap_or(-1.0),
-            }
-        }
-    }
-
-    // Trait for
-    pub trait Exchange {
-        
-        // Returns the name of an exchange
-        fn name() -> &'static str;
-        
-        // Returns the url of exchange's websocket stream
-        fn url() -> &'static str;
-
-        // Return url with orderbook subscription for given markets
-        fn orderbook_subscription_url(_: Vec<String>) -> Result<Url> {
-            bail!("No subscription url available for {}", Self::name());
-        }
-
+    use crate::exchange::structs::Orderbook;
+    use crate::{ReadStream, WriteStream};
+    
+    pub trait Connectable: Exchange {
         // Returns an instance of an exchange with opened websocket connection with certain subscription
-        async fn connect_with_subscription_async(markets: Vec<String>) -> Result<Box<Self>> {
-            let subscription = Self::orderbook_subscription_url(markets)?;
+        async fn connect_with_subscription_async(&mut self, markets: Vec<String>) -> Result<()> {
+            let subscription = &self.orderbook_subscription_url(markets)?;
             let (ws_stream, _) = connect_async(subscription.to_string()).await?;
             let (write_stream,
                 read_stream) = ws_stream.split();
 
-            Ok(
-                Self::new(read_stream, write_stream)
-            )
+            self.set_read_stream(read_stream);
+            self.set_write_stream(write_stream);
+
+            Ok(())
+        }
+    }
+    
+    pub trait Exchange: Send {
+        
+        // Returns the name of an exchange
+        fn name(&self) -> &'static str;
+        
+        // Returns the url of exchange's websocket stream
+        fn url(&self) -> &'static str;
+
+        // Return url with orderbook subscription for given markets
+        fn orderbook_subscription_url(&self, _: Vec<String>) -> Result<Url> {
+            bail!("No subscription url available for {}", self.name());
         }
 
         // Returns a vector of orderbooks parsed from websocket server message
-        fn parse_orderbook_data(raw_data: &HashMap<String, Value>) -> Option<Orderbook>;
+        fn parse_orderbook_data(&self, raw_data: &HashMap<String, Value>) -> Option<Orderbook>;
 
         // Getters and setters for r/w streams fields
-        fn read_stream(&mut self) -> &mut SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
+        fn read_stream(&mut self) -> &mut Option<ReadStream>;
 
-        fn write_stream(&mut self) -> &mut SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
-        
-        fn set_read_stream(&mut self, stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>);
-        
-        fn set_write_stream(&mut self, stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>);
-        
-        // Constructor
-        fn new(
-            read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-            write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>
-        ) -> Box<Self>;
+        fn write_stream(&mut self) -> &mut Option<WriteStream>;
+
+        fn set_read_stream(&mut self, stream: ReadStream);
+
+        fn set_write_stream(&mut self, stream: WriteStream);
     }
 }

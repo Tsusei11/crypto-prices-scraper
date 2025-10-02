@@ -1,37 +1,46 @@
 use std::collections::HashMap;
-use futures_util::stream::{SplitSink, SplitStream};
-use tokio::net::TcpStream;
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
-use crate::exchange::traits::{Exchange, Orderbook};
+use crate::exchange::traits::{Connectable, Exchange};
 use serde_json::Value;
-use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 use anyhow::Result;
+use crate::exchange::structs::Orderbook;
+use crate::{ReadStream, WriteStream};
 
 pub struct Binance {
-    read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-    write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>
+    read_stream: Option<ReadStream>,
+    write_stream: Option<WriteStream>
 }
 
+impl Binance {
+    pub fn new() -> Self {
+        Self {
+            read_stream: None,
+            write_stream: None
+        }
+    }
+}
+
+impl Connectable for Binance {}
+
 impl Exchange for Binance {
-    fn name() -> &'static str {
+    fn name(&self) -> &'static str {
         "Binance"
     }
 
-    fn url() -> &'static str {
+    fn url(&self) -> &'static str {
         "wss://stream.binance.com/stream"
     }
 
-    fn orderbook_subscription_url(markets: Vec<String>) -> Result<Url> {
+    fn orderbook_subscription_url(&self, markets: Vec<String>) -> Result<Url> {
         let url = Url::parse_with_params(
-            Self::url(),
+            self.url(),
             &[("streams", markets.join("@bookTicker/") + "@bookTicker")]
         )?;
 
         Ok(url)
     }
 
-    fn parse_orderbook_data(raw_data: &HashMap<String, Value>) -> Option<Orderbook> {
+    fn parse_orderbook_data(&self, raw_data: &HashMap<String, Value>) -> Option<Orderbook> {
         let data = raw_data
             .get("data")?
             .as_object()?;
@@ -50,7 +59,7 @@ impl Exchange for Binance {
 
         Some(
             Orderbook::new(
-                Self::name(),
+                self.name(),
                 symbol,
                 bid,
                 ask
@@ -58,26 +67,19 @@ impl Exchange for Binance {
         )
     }
 
-    fn read_stream(&mut self) -> &mut SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+    fn read_stream(&mut self) -> &mut Option<ReadStream>{
         &mut self.read_stream
     }
 
-    fn write_stream(&mut self) -> &mut SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message> {
+    fn write_stream(&mut self) -> &mut Option<WriteStream> {
         &mut self.write_stream
     }
 
-    fn set_read_stream(&mut self, stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>) {
-        self.read_stream = stream;
+    fn set_read_stream(&mut self, stream: ReadStream) {
+        self.read_stream = Some(stream);
     }
 
-    fn set_write_stream(&mut self, stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>) {
-        self.write_stream = stream;
-    }
-
-    fn new(
-        read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-        write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>
-    ) -> Box<Self> {
-        Box::new(Self { read_stream, write_stream })
+    fn set_write_stream(&mut self, stream: WriteStream) {
+        self.write_stream = Some(stream);
     }
 }

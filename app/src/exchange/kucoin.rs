@@ -1,22 +1,29 @@
 use std::collections::HashMap;
 use anyhow::bail;
-use futures_util::stream::{SplitSink, SplitStream};
 use serde_json::{json, Value};
-use tokio::net::TcpStream;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
 use crate::exchange::Exchange;
-use crate::exchange::traits::Orderbook;
+use crate::exchange::structs::Orderbook;
+use crate::{ReadStream, WriteStream};
+use crate::exchange::traits::Connectable;
 
 pub struct KuCoin {
-    read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-    write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>
+    read_stream: Option<ReadStream>,
+    write_stream: Option<WriteStream>
 }
 
 impl KuCoin {
+    
+    pub(crate) fn new() -> Self {
+        Self {
+            read_stream: None,
+            write_stream: None
+        }
+    }
 
     // Returns the token required for Websocket to establish a Spot/Margin connection
     async fn get_public_token() -> Result<String> {
@@ -43,19 +50,11 @@ impl KuCoin {
     }
 }
 
-impl Exchange for KuCoin {
-    fn name() -> &'static str {
-        "KuCoin"
-    }
-
-    fn url() -> &'static str {
-        "wss://ws-api-spot.kucoin.com/"
-    }
-
-    async fn connect_with_subscription_async(markets: Vec<String>) -> Result<Box<Self>> {
+impl Connectable for KuCoin {
+    async fn connect_with_subscription_async(&mut self, markets: Vec<String>) -> Result<()> {
         let token = Self::get_public_token().await?;
         let url = Url::parse_with_params(
-            Self::url(),
+            self.url(),
             &[("token", token)],
         )?;
 
@@ -79,12 +78,24 @@ impl Exchange for KuCoin {
 
         write_stream.send(Message::text(msg.to_string())).await?;
 
-        Ok(
-            Self::new(read_stream, write_stream)
-        )
+        self.set_read_stream(read_stream);
+        self.set_write_stream(write_stream);
+
+        Ok(())
     }
 
-    fn parse_orderbook_data(raw_data: &HashMap<String, Value>) -> Option<Orderbook> {
+}
+
+impl Exchange for KuCoin {
+    fn name(&self) -> &'static str {
+        "KuCoin"
+    }
+
+    fn url(&self) -> &'static str {
+        "wss://ws-api-spot.kucoin.com/"
+    }
+    
+    fn parse_orderbook_data(&self, raw_data: &HashMap<String, Value>) -> Option<Orderbook> {
         let symbol = raw_data
             .get("topic")?
             .as_str()?
@@ -110,7 +121,7 @@ impl Exchange for KuCoin {
 
         Some(
             Orderbook::new(
-                Self::name(),
+                self.name(),
                 symbol.as_str(),
                 bid,
                 ask
@@ -118,26 +129,20 @@ impl Exchange for KuCoin {
         )
     }
 
-    fn read_stream(&mut self) -> &mut SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+    fn read_stream(&mut self) -> &mut Option<ReadStream>{
         &mut self.read_stream
     }
 
-    fn write_stream(&mut self) -> &mut SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message> {
+    fn write_stream(&mut self) -> &mut Option<WriteStream> {
         &mut self.write_stream
     }
 
-    fn set_read_stream(&mut self, stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>) {
-        self.read_stream = stream;
+    fn set_read_stream(&mut self, stream: ReadStream) {
+        self.read_stream = Some(stream);
     }
 
-    fn set_write_stream(&mut self, stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>) {
-        self.write_stream = stream;
-    }
-
-    fn new(
-        read_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-        write_stream: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>
-    ) -> Box<Self> {
-        Box::new(Self { read_stream, write_stream })
+    fn set_write_stream(&mut self, stream: WriteStream) {
+        self.write_stream = Some(stream);
     }
 }
+
