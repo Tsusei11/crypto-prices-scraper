@@ -1,7 +1,6 @@
 use crate::utils::load_markets;
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use exchange::Exchange;
 use exchange::traits::Connectable;
@@ -9,12 +8,12 @@ use exchange::structs::Orderbook;
 
 use anyhow::{bail, Result};
 use dotenv::dotenv;
-use futures_util::lock::Mutex;
 use futures_util::StreamExt;
 use rustls::crypto::ring;
 use serde_json::Value;
 use tokio::sync::mpsc::unbounded_channel;
 use tokio_tungstenite::tungstenite::Message;
+use crate::ReadStream;
 
 pub struct Engine {
     pub exchanges: Vec<Box<dyn Exchange>>,
@@ -38,19 +37,19 @@ impl Engine {
     pub async fn read_all_orderbooks(exchanges: Vec<Box<dyn Exchange>>) -> Result<()> {
         let (tx, mut rx) = unbounded_channel::<Orderbook>();
 
-        for exchange in exchanges {
+        for mut exchange in exchanges {
             let name = exchange.name();
-            let exchange = Arc::new(Mutex::new(exchange));
+            // let exchange = Arc::new(Mutex::new(exchange));
             let tx = tx.clone();
             tokio::spawn(async move {
                 println!("Started task for exchange {}", name);
                 loop {
-                    let data = Engine::read_orderbooks(exchange.clone())
+                    let data = Engine::read_orderbooks(exchange.read_stream())
                         .await
                         .expect(format!("Error reading orderbooks from {}", name).as_str());
 
                     if let Some(data) = data {
-                        if let Some(orderbook) = exchange.lock().await.parse_orderbook_data(&data) {
+                        if let Some(orderbook) = exchange.parse_orderbook_data(&data) {
                             tx.send(orderbook)
                                 .expect(format!("Error sending orderbook from {}", name).as_str());
                         }
@@ -59,15 +58,21 @@ impl Engine {
             });
         }
 
-        loop {
-            if let Some(orderbook) = rx.recv().await {
-                println!("{:?}", orderbook);
+        let reader = tokio::spawn(async move {
+            loop {
+                if let Some(orderbook) = rx.recv().await {
+                    println!("{:?}", orderbook);
+                }
             }
-        }
+        });
+
+        // 19200 / 9435
+        let _ = tokio::join!(reader);
+        Ok(())
     }
 
-    async fn read_orderbooks(exchange: Arc<Mutex<Box<dyn Exchange>>>) -> Result<Option<HashMap<String, Value>>> {
-        if let Some(stream) = exchange.lock().await.read_stream() {
+    async fn read_orderbooks(stream: &mut Option<ReadStream>) -> Result<Option<HashMap<String, Value>>> {
+        if let Some(stream) = stream {
             if let Some(msg) = (*stream).next().await {
                 match msg {
                     Ok(msg) => {
@@ -82,8 +87,6 @@ impl Engine {
                     }
                 }
             }
-        } else {
-            bail!("No read stream available for {}", exchange.lock().await.name());
         }
 
         Ok(None)
