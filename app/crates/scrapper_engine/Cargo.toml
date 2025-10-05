@@ -1,0 +1,15 @@
+[package]
+name = "scrapper_engine"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+exchange = {path = "../exchange"}
+
+anyhow = "1.0.100"
+tokio-tungstenite = { version = "0.28.0", features = ["rustls-tls-webpki-roots"] }
+tokio = { version = "1.47.1", features = ["rt", "rt-multi-thread", "macros"] }
+futures-util = "0.3.31"
+serde_json = "1.0.145"
+rustls = { version = "0.23.32", features = ["ring"] }
+dotenv = "0.15.0"

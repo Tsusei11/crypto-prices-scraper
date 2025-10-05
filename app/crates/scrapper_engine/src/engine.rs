@@ -1,15 +1,20 @@
+use crate::utils::load_markets;
+
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::exchange::Exchange;
-use crate::exchange::traits::Connectable;
-use crate::utils::load_markets;
+
+use exchange::Exchange;
+use exchange::traits::Connectable;
+use exchange::structs::Orderbook;
+
 use anyhow::{bail, Result};
+use dotenv::dotenv;
 use futures_util::lock::Mutex;
 use futures_util::StreamExt;
+use rustls::crypto::ring;
 use serde_json::Value;
 use tokio::sync::mpsc::unbounded_channel;
 use tokio_tungstenite::tungstenite::Message;
-use crate::exchange::structs::Orderbook;
 
 pub struct Engine {
     pub exchanges: Vec<Box<dyn Exchange>>,
@@ -17,6 +22,8 @@ pub struct Engine {
 
 impl Engine {
     pub fn new() -> Self {
+        ring::default_provider().install_default().unwrap();
+        dotenv().ok();
         Self { exchanges: Vec::new() }
     }
 
@@ -28,7 +35,7 @@ impl Engine {
         self.exchanges.push(Box::new(exchange));
     }
 
-    pub async fn read_all_orderbooks(exchanges: Vec<Box<dyn Exchange>>) {
+    pub async fn read_all_orderbooks(exchanges: Vec<Box<dyn Exchange>>) -> Result<()> {
         let (tx, mut rx) = unbounded_channel::<Orderbook>();
 
         for exchange in exchanges {

@@ -1,10 +1,12 @@
+use crate::traits::{Connectable, Exchange};
+use crate::structs::Orderbook;
+use crate::{ReadStream, WriteStream};
+
 use std::collections::HashMap;
-use crate::exchange::traits::{Connectable, Exchange};
+
 use serde_json::Value;
 use url::Url;
 use anyhow::Result;
-use crate::exchange::structs::Orderbook;
-use crate::{ReadStream, WriteStream};
 
 pub struct Binance {
     read_stream: Option<ReadStream>,

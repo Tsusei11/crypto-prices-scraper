@@ -1,13 +1,16 @@
+use crate::Exchange;
+use crate::structs::Orderbook;
+use crate::{ReadStream, WriteStream};
+use crate::traits::Connectable;
+
 use std::collections::HashMap;
+
 use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
-use crate::exchange::Exchange;
-use crate::exchange::structs::Orderbook;
-use crate::{ReadStream, WriteStream};
-use crate::exchange::traits::Connectable;
+
 
 pub struct ByBit {
     read_stream: Option<ReadStream>,
@@ -15,7 +18,7 @@ pub struct ByBit {
 }
 
 impl ByBit {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             read_stream: None,
             write_stream: None

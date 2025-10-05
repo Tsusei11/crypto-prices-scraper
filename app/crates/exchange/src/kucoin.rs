@@ -1,4 +1,10 @@
+use crate::Exchange;
+use crate::structs::Orderbook;
+use crate::{ReadStream, WriteStream};
+use crate::traits::Connectable;
+
 use std::collections::HashMap;
+
 use anyhow::bail;
 use serde_json::{json, Value};
 use tokio_tungstenite::connect_async;
@@ -6,10 +12,6 @@ use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
-use crate::exchange::Exchange;
-use crate::exchange::structs::Orderbook;
-use crate::{ReadStream, WriteStream};
-use crate::exchange::traits::Connectable;
 
 pub struct KuCoin {
     read_stream: Option<ReadStream>,
@@ -18,7 +20,7 @@ pub struct KuCoin {
 
 impl KuCoin {
     
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             read_stream: None,
             write_stream: None
