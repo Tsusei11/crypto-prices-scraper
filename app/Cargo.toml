@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = [".", "crates/exchange", "crates/scrapper_engine"]
+members = [".", "crates/db", "crates/exchange", "crates/scrapper_engine"]
 
 [dependencies]
 exchange = { path = "crates/exchange"}

@@ -1,10 +1,12 @@
+use bigdecimal::BigDecimal;
+
 // DTO for orderbook
 #[derive(Debug)]
 pub struct Orderbook {
     pub exchange: String,
     pub symbol: String,
-    pub bid: f64,
-    pub ask: f64,
+    pub bid: BigDecimal,
+    pub ask: BigDecimal,
 }
 
 impl Orderbook {
@@ -12,8 +14,8 @@ impl Orderbook {
         Self {
             exchange: exchange.to_string(),
             symbol: symbol.to_string(),
-            bid: bid.parse::<f64>().unwrap_or(-1.0),
-            ask: ask.parse::<f64>().unwrap_or(-1.0),
+            bid: bid.to_string().parse().unwrap_or(BigDecimal::from(-1)),
+            ask: ask.to_string().parse().unwrap_or(BigDecimal::from(-1)),
         }
     }
 }

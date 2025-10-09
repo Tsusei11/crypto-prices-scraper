@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 exchange = {path = "../exchange"}
+db = {path = "../db"}
 
 anyhow = "1.0.100"
 tokio-tungstenite = { version = "0.28.0", features = ["rustls-tls-webpki-roots"] }
@@ -13,3 +14,5 @@ futures-util = "0.3.31"
 serde_json = "1.0.145"
 rustls = { version = "0.23.32", features = ["ring"] }
 dotenv = "0.15.0"
+bigdecimal = "0.4.8"
+diesel = "2.3.2"
