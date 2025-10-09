@@ -9,5 +9,7 @@ async fn main() {
     engine.connect_to(ByBit::new()).await;
     engine.connect_to(KuCoin::new()).await;
 
-    Engine::read_all_orderbooks(engine.exchanges).await.expect("Error reading all orderbooks");
+    let rx = Engine::get_orderbooks_receiver(engine.exchanges).await;
+
+    Engine::save_bars_1min(rx).await.expect("Error saving 1 min bars");
 }

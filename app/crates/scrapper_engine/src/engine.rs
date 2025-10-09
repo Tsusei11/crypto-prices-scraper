@@ -1,19 +1,23 @@
 use crate::utils::load_markets;
+use crate::{MapOLHC, ReadStream};
+use crate::structs::OLHC;
 
 use std::collections::HashMap;
-
+use std::io::Write;
+use std::sync::Arc;
+use std::time::Duration;
 use exchange::Exchange;
 use exchange::traits::Connectable;
 use exchange::structs::Orderbook;
 
 use anyhow::{bail, Result};
 use dotenv::dotenv;
+use futures_util::lock::Mutex;
 use futures_util::StreamExt;
 use rustls::crypto::ring;
 use serde_json::Value;
-use tokio::sync::mpsc::unbounded_channel;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use tokio_tungstenite::tungstenite::Message;
-use crate::ReadStream;
 
 pub struct Engine {
     pub exchanges: Vec<Box<dyn Exchange>>,
@@ -34,15 +38,54 @@ impl Engine {
         self.exchanges.push(Box::new(exchange));
     }
 
-    pub async fn read_all_orderbooks(exchanges: Vec<Box<dyn Exchange>>) -> Result<()> {
-        let (tx, mut rx) = unbounded_channel::<Orderbook>();
+    pub async fn save_bars_1min(mut rx: UnboundedReceiver<Orderbook>) -> Result<()> {
+        let map_olhc = Arc::new(Mutex::new(MapOLHC::new()));
+        let writer_map = map_olhc.clone();
+        let saver_map = map_olhc.clone();
+
+        let writer = tokio::spawn(async move {
+            loop {
+                if let Some(orderbook) = rx.recv().await {
+                    println!("Got orderbook {:#?}", orderbook);
+                    OLHC::update_map(writer_map.clone(), orderbook).await;
+                }
+            }
+        });
+
+        let saver = tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(Duration::from_secs(60));
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+
+                let guard = {
+                    let mut guard = saver_map.lock().await;
+                    let data = guard.clone();
+
+                    guard.clear();
+                    data
+                };
+
+                tokio::task::spawn_blocking(move || {
+                    OLHC::save_map(guard)
+                });
+
+                println!("\nSaved data to the database\n");
+            }
+        });
+
+        tokio::try_join!(writer, saver)?;
+        Ok(())
+    }
+
+    pub async fn get_orderbooks_receiver(exchanges: Vec<Box<dyn Exchange>>) -> UnboundedReceiver<Orderbook> {
+        let (tx, rx) = unbounded_channel::<Orderbook>();
 
         for mut exchange in exchanges {
             let name = exchange.name();
-            // let exchange = Arc::new(Mutex::new(exchange));
+
             let tx = tx.clone();
             tokio::spawn(async move {
-                println!("Started task for exchange {}", name);
                 loop {
                     let data = Engine::read_orderbooks(exchange.read_stream())
                         .await
@@ -58,17 +101,7 @@ impl Engine {
             });
         }
 
-        let reader = tokio::spawn(async move {
-            loop {
-                if let Some(orderbook) = rx.recv().await {
-                    println!("{:?}", orderbook);
-                }
-            }
-        });
-
-        // 19200 / 9435
-        let _ = tokio::join!(reader);
-        Ok(())
+        rx
     }
 
     async fn read_orderbooks(stream: &mut Option<ReadStream>) -> Result<Option<HashMap<String, Value>>> {
