@@ -4,9 +4,8 @@ use crate::MapOLHC;
 use std::sync::Arc;
 
 use bigdecimal::BigDecimal;
-use diesel::RunQueryDsl;
+use diesel::{PgConnection, RunQueryDsl};
 use futures_util::lock::Mutex;
-use db::db::establish_connection;
 use db::models::NewBar1min;
 use db::schema::bars_1min;
 use exchange::structs::Orderbook;
@@ -64,31 +63,29 @@ impl OLHC {
         }
     }
 
-    pub fn save_map(map: MapOLHC){
+    pub fn save_map(map: MapOLHC, conn: &mut PgConnection) {
 
         for (exchange, markets) in map.iter() {
             for (market, olhc) in markets.iter() {
-                olhc.save_to_db(&exchange, &market)
+                olhc.save_to_db(&exchange, &market, conn)
             }
         }
 
     }
 
-    fn save_to_db(&self, exchange: &String, market: &String) {
-        let bar_1min = NewBar1min {
+    fn save_to_db(&self, exchange: &String, market: &String, conn: &mut PgConnection) {
+        let bar_1min = NewBar1min::new(
             exchange,
             market,
-            open: self.open.clone(),
-            close: self.close.clone(),
-            min: self.min.clone(),
-            max: self.max.clone(),
-        };
-        let mut connection = establish_connection()
-            .expect("Error establishing connection.");
+            self.open.clone(),
+            self.close.clone(),
+            self.min.clone(),
+            self.max.clone(),
+        );
 
         diesel::insert_into(bars_1min::table)
             .values(&bar_1min)
-            .execute(&mut connection)
+            .execute(conn)
             .expect("Error saving bars_1min");
     }
 }

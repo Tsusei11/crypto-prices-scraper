@@ -26,12 +26,12 @@ pub struct NewBar1min<'a> {
 }
 
 impl<'a> NewBar1min<'a> {
-    fn new(exchange: &'a str,
-           market: &'a str,
-           open: BigDecimal,
-           close: BigDecimal,
-           min: BigDecimal,
-           max: BigDecimal) -> NewBar1min<'a> {
+    pub fn new(exchange: &'a str,
+               market: &'a str,
+               open: BigDecimal,
+               close: BigDecimal,
+               min: BigDecimal,
+               max: BigDecimal) -> NewBar1min<'a> {
 
         NewBar1min {
             exchange,

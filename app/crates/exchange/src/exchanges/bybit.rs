@@ -1,53 +1,25 @@
 use crate::Exchange;
 use crate::structs::Orderbook;
 use crate::{ReadStream, WriteStream};
-use crate::traits::Connectable;
 
 use std::collections::HashMap;
 
-use anyhow::Result;
-use futures_util::{SinkExt, StreamExt};
-use serde_json::{json, Value};
-use tokio_tungstenite::connect_async;
-use tokio_tungstenite::tungstenite::Message;
-
+use serde_json::Value;
+use crate::enums::AnyExchange;
 
 pub struct ByBit {
     read_stream: Option<ReadStream>,
-    write_stream: Option<WriteStream>
+    write_stream: Option<WriteStream>,
+    exchange_type: AnyExchange,
 }
 
 impl ByBit {
     pub fn new() -> Self {
         Self {
             read_stream: None,
-            write_stream: None
+            write_stream: None,
+            exchange_type: AnyExchange::ByBit
         }
-    }
-}
-
-impl Connectable for ByBit {
-    async fn connect_with_subscription_async(&mut self, markets: Vec<String>) -> Result<()> {
-        let (ws_stream, _) = connect_async(self.url()).await?;
-        let (mut write_stream,
-            read_stream) = ws_stream.split();
-
-        let markets = markets
-            .iter()
-            .map(|m| format!("orderbook.1.{}", m.to_uppercase()))
-            .collect::<Vec<String>>();
-
-        let msg = json!({
-            "op": "subscribe",
-            "args": markets,
-        });
-
-        write_stream.send(Message::text(msg.to_string())).await?;
-
-        self.set_read_stream(read_stream);
-        self.set_write_stream(write_stream);
-
-        Ok(())
     }
 }
 
@@ -58,6 +30,10 @@ impl Exchange for ByBit {
 
     fn url(&self) -> &'static str {
         "wss://stream.bybit.com/v5/public/spot"
+    }
+
+    fn get_type(&self) -> &AnyExchange {
+        &self.exchange_type
     }
 
     fn parse_orderbook_data(&self, raw_data: &HashMap<String, Value>) -> Option<Orderbook> {

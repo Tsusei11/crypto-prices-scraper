@@ -1,12 +1,12 @@
-pub mod binance;
-pub mod kucoin;
-pub mod bybit;
 pub mod structs;
 pub mod traits;
+pub mod enums;
+pub mod exchanges;
+mod util;
 
-pub use binance::Binance;
-pub use kucoin::KuCoin;
-pub use bybit::ByBit;
+pub use exchanges::binance::Binance;
+pub use exchanges::kucoin::KuCoin;
+pub use exchanges::bybit::ByBit;
 pub use traits::Exchange;
 
 use tokio::net::TcpStream;

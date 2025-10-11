@@ -1,28 +1,27 @@
-use crate::traits::{Connectable, Exchange};
+use crate::traits::Exchange;
 use crate::structs::Orderbook;
 use crate::{ReadStream, WriteStream};
 
 use std::collections::HashMap;
 
 use serde_json::Value;
-use url::Url;
-use anyhow::Result;
+use crate::enums::AnyExchange;
 
 pub struct Binance {
     read_stream: Option<ReadStream>,
-    write_stream: Option<WriteStream>
+    write_stream: Option<WriteStream>,
+    exchange_type: AnyExchange,
 }
 
 impl Binance {
     pub fn new() -> Self {
         Self {
             read_stream: None,
-            write_stream: None
+            write_stream: None,
+            exchange_type: AnyExchange::Binance
         }
     }
 }
-
-impl Connectable for Binance {}
 
 impl Exchange for Binance {
     fn name(&self) -> &'static str {
@@ -33,13 +32,8 @@ impl Exchange for Binance {
         "wss://stream.binance.com/stream"
     }
 
-    fn orderbook_subscription_url(&self, markets: Vec<String>) -> Result<Url> {
-        let url = Url::parse_with_params(
-            self.url(),
-            &[("streams", markets.join("@bookTicker/") + "@bookTicker")]
-        )?;
-
-        Ok(url)
+    fn get_type(&self) -> &AnyExchange {
+        &self.exchange_type
     }
 
     fn parse_orderbook_data(&self, raw_data: &HashMap<String, Value>) -> Option<Orderbook> {

@@ -3,21 +3,26 @@ use crate::{MapOLHC, ReadStream};
 use crate::structs::OLHC;
 
 use std::collections::HashMap;
-use std::io::Write;
 use std::sync::Arc;
 use std::time::Duration;
 use exchange::Exchange;
-use exchange::traits::Connectable;
 use exchange::structs::Orderbook;
 
-use anyhow::{bail, Result};
-use dotenv::dotenv;
+use anyhow::Result;
 use futures_util::lock::Mutex;
-use futures_util::StreamExt;
-use rustls::crypto::ring;
+use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
-use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::{Bytes, Message};
+use db::db::DbPool;
+use exchange::enums::AnyExchange;
+use crate::engine::MessageType::Closed;
+
+enum MessageType {
+    Data(HashMap<String, Value>),
+    Ping(Bytes),
+    Closed
+}
 
 pub struct Engine {
     pub exchanges: Vec<Box<dyn Exchange>>,
@@ -25,20 +30,29 @@ pub struct Engine {
 
 impl Engine {
     pub fn new() -> Self {
-        ring::default_provider().install_default().unwrap();
-        dotenv().ok();
-        Self { exchanges: Vec::new() }
+
+        Self {
+            exchanges: Vec::new(),
+        }
     }
 
-    pub async fn connect_to(&mut self, mut exchange: impl Connectable + 'static) {
-        exchange.connect_with_subscription_async(
-            load_markets(exchange.name()).expect(format!("Error loading markets for {}", exchange.name()).as_str()),
-        ).await.expect(format!("Error connecting to {}", exchange.name()).as_str());
-
+    pub async fn add(mut self, mut exchange: impl Exchange + 'static) -> Self {
+        Engine::connect_to(&mut exchange).await;
         self.exchanges.push(Box::new(exchange));
+
+        self
     }
 
-    pub async fn save_bars_1min(mut rx: UnboundedReceiver<Orderbook>) -> Result<()> {
+    async fn connect_to(exchange: &mut dyn Exchange) {
+        let name = exchange.name();
+        println!("Connecting to {}", name);
+        AnyExchange::connect_orderbooks_async(
+            exchange,
+            load_markets(name).expect(format!("Error loading markets for {}", name).as_str()),
+        ).await.expect(format!("Error connecting to {}", name).as_str());
+    }
+
+    pub async fn save_bars_1min(mut rx: UnboundedReceiver<Orderbook>, pool: DbPool) -> Result<()> {
         let map_olhc = Arc::new(Mutex::new(MapOLHC::new()));
         let writer_map = map_olhc.clone();
         let saver_map = map_olhc.clone();
@@ -46,13 +60,12 @@ impl Engine {
         let writer = tokio::spawn(async move {
             loop {
                 if let Some(orderbook) = rx.recv().await {
-                    println!("Got orderbook {:#?}", orderbook);
                     OLHC::update_map(writer_map.clone(), orderbook).await;
                 }
             }
         });
 
-        let saver = tokio::spawn(async move {
+        tokio::spawn(async move {
             let mut ticker = tokio::time::interval(Duration::from_secs(60));
             ticker.tick().await;
             loop {
@@ -66,15 +79,17 @@ impl Engine {
                     data
                 };
 
+                let pool = pool.clone();
+
                 tokio::task::spawn_blocking(move || {
-                    OLHC::save_map(guard)
+                    OLHC::save_map(guard, &mut pool.get().expect("Error getting DB connection"))
                 });
 
                 println!("\nSaved data to the database\n");
             }
         });
 
-        tokio::try_join!(writer, saver)?;
+        writer.await?;
         Ok(())
     }
 
@@ -92,9 +107,25 @@ impl Engine {
                         .expect(format!("Error reading orderbooks from {}", name).as_str());
 
                     if let Some(data) = data {
-                        if let Some(orderbook) = exchange.parse_orderbook_data(&data) {
-                            tx.send(orderbook)
-                                .expect(format!("Error sending orderbook from {}", name).as_str());
+
+                        match data {
+                            MessageType::Data(data) => {
+                                if let Some(orderbook) = exchange.parse_orderbook_data(&data) {
+                                    tx.send(orderbook)
+                                        .expect(format!("Error sending orderbook from {}", name).as_str());
+                                }
+                            },
+                            MessageType::Ping(payload) => {
+                                if let Some(write_stream) = exchange.write_stream().as_mut() {
+                                    write_stream.send(Message::Pong(payload))
+                                        .await
+                                        .expect("Error responding to ping");
+                                    println!("Responding to ping from {}", name);
+                                }
+                            },
+                            Closed => {
+                                Self::connect_to(exchange.as_mut()).await;
+                            }
                         }
                     }
                 }
@@ -104,19 +135,27 @@ impl Engine {
         rx
     }
 
-    async fn read_orderbooks(stream: &mut Option<ReadStream>) -> Result<Option<HashMap<String, Value>>> {
-        if let Some(stream) = stream {
-            if let Some(msg) = (*stream).next().await {
+    async fn read_orderbooks(r_stream: &mut Option<ReadStream>) -> Result<Option<MessageType>> {
+        if let Some(r_stream) = r_stream {
+            if let Some(msg) = (*r_stream).next().await {
                 match msg {
-                    Ok(msg) => {
-                        if let Message::Text(text) = msg {
-                            let data = serde_json::from_str::<HashMap<String, Value>>(&text)?;
+                    Ok(Message::Text(text)) => {
+                        let data = serde_json::from_str::<HashMap<String, Value>>(&text)?;
 
-                            return Ok(Some(data));
-                        }
+                        return Ok(Some(MessageType::Data(data)));
+                    },
+                    Ok(Message::Close(_)) => {
+                        return Ok(Some(Closed));
+                    },
+                    Ok(Message::Ping(p)) => {
+                        return Ok(Some(MessageType::Ping(p)));
                     }
                     Err(e) => {
-                        bail!("Error receiving message: {}", e);
+                        println!("Error receiving message: {}", e);
+                        return Ok(Some(Closed));
+                    },
+                    _ => {
+                        println!("Received unexpected message from the server");
                     }
                 }
             }

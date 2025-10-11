@@ -1,15 +1,23 @@
-use ::exchange::{Binance, ByBit, KuCoin};
+use dotenv::dotenv;
+use rustls::crypto::ring;
+use ::exchange::exchanges::{Binance, ByBit, KuCoin};
+use db::db::init_pool;
 use scrapper_engine::engine::Engine;
 
 #[tokio::main]
 async fn main() {
 
-    let mut engine = Engine::new();
-    engine.connect_to(Binance::new()).await;
-    engine.connect_to(ByBit::new()).await;
-    engine.connect_to(KuCoin::new()).await;
+    ring::default_provider().install_default().unwrap();
+    dotenv().ok();
 
-    let rx = Engine::get_orderbooks_receiver(engine.exchanges).await;
+    let pool = init_pool();
+    let engine = Engine::new()
+        .add(Binance::new()).await
+        .add(ByBit::new()).await
+        .add(KuCoin::new()).await;
 
-    Engine::save_bars_1min(rx).await.expect("Error saving 1 min bars");
+    Engine::save_bars_1min(
+        Engine::get_orderbooks_receiver(engine.exchanges).await,
+        pool
+    ).await.expect("Error saving 1 min bars");
 }
