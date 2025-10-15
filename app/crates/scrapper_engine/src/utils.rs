@@ -10,4 +10,8 @@ pub mod utils {
             env::var(key)?.split(";").map(|s| {s.to_string()}).collect::<Vec<String>>()
         )
     }
+    
+    pub fn load_ping_interval() -> Result<u64> {
+        Ok(env::var("PING_INTERVAL")?.parse::<u64>()?)
+    }
 }

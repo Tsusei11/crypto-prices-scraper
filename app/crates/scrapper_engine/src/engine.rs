@@ -1,6 +1,7 @@
-use crate::utils::load_markets;
+use crate::utils::{load_markets, load_ping_interval};
 use crate::{MapOLHC, ReadStream};
 use crate::structs::OLHC;
+use crate::engine::MessageType::Closed;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,14 +14,15 @@ use futures_util::lock::Mutex;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
+use tokio::time::Instant;
 use tokio_tungstenite::tungstenite::{Bytes, Message};
 use db::db::DbPool;
 use exchange::enums::AnyExchange;
-use crate::engine::MessageType::Closed;
 
 enum MessageType {
     Data(HashMap<String, Value>),
     Ping(Bytes),
+    Pong,
     Closed
 }
 
@@ -96,11 +98,15 @@ impl Engine {
     pub async fn get_orderbooks_receiver(exchanges: Vec<Box<dyn Exchange>>) -> UnboundedReceiver<Orderbook> {
         let (tx, rx) = unbounded_channel::<Orderbook>();
 
+        let ping_interval = load_ping_interval().expect("Error loading ping interval");
+
         for mut exchange in exchanges {
             let name = exchange.name();
 
             let tx = tx.clone();
+
             tokio::spawn(async move {
+                let mut start = Instant::now();
                 loop {
                     let data = Engine::read_orderbooks(exchange.read_stream())
                         .await
@@ -123,13 +129,25 @@ impl Engine {
                                     println!("Responding to ping from {}", name);
                                 }
                             },
+                            MessageType::Pong => {
+                                println!("Received pong from {}", name);
+                            }
                             Closed => {
                                 Self::connect_to(exchange.as_mut()).await;
                             }
                         }
                     }
+
+                    if start.elapsed().as_secs() >= ping_interval {
+                        if let Some(write_stream) = exchange.write_stream().as_mut() {
+                            println!("Sending ping to {}", name);
+                            write_stream.send(Message::Ping(Bytes::new())).await.expect("Error sending ping");
+                        }
+                        start = Instant::now();
+                    }
                 }
             });
+
         }
 
         rx
@@ -149,6 +167,9 @@ impl Engine {
                     },
                     Ok(Message::Ping(p)) => {
                         return Ok(Some(MessageType::Ping(p)));
+                    },
+                    Ok(Message::Pong(_)) => {
+                        return Ok(Some(MessageType::Pong));
                     }
                     Err(e) => {
                         println!("Error receiving message: {}", e);
