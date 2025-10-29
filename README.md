@@ -100,7 +100,7 @@ Returns a JSON array of all configured market pairs.
 * **Endpoint:** `/markets`
 * **Response:**
     ```json
-    ["btcusdt", "ethusdt", "btc-usdt", "eth-usdt"]
+    ["btcusdt", "ethusdt"]
     ```
 
 ### 3. Get Last 1-Minute Bar
