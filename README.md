@@ -33,7 +33,7 @@ The project is organized into a multi-crate workspace to separate concerns:
 * `scrapper_engine`: The core logic for managing WebSocket connections, handling subscriptions, and retrieving raw data.
 * `exchanges`: Contains exchange-specific modules for defining request formats and parsing data structures for each supported exchange.
 * `db`: A dedicated crate for all database interactions, using Diesel. It handles saving the 1-minute bars from the scraper and fetching data for the API.
-* `web_api`: The Axum application that defines and serves the HTTP GET endpoints.
+* `api`: The Axum application that defines and serves the HTTP GET endpoints.
 
 ---
 
