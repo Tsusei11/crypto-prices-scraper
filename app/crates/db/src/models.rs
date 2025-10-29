@@ -1,13 +1,15 @@
-use bigdecimal::BigDecimal;
-use chrono::{DateTime, Utc};
-use diesel::{Insertable, Queryable};
 use crate::schema::bars_1min;
-#[derive(Queryable, Debug)]
+use bigdecimal::BigDecimal;
+use chrono::NaiveDateTime;
+use diesel::{Insertable, Queryable};
+use serde::Serialize;
+
+#[derive(Queryable, Debug, Serialize)]
 pub struct Bar1min {
     pub id: i32,
     pub exchange: String,
     pub market: String,
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: NaiveDateTime,
     pub open: BigDecimal,
     pub close: BigDecimal,
     pub min: BigDecimal,

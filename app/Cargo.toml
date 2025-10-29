@@ -4,13 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = [".", "crates/db", "crates/exchange", "crates/scrapper_engine"]
+members = [".", "crates/api", "crates/db", "crates/exchange", "crates/scrapper_engine"]
 
 [dependencies]
 exchange = { path = "crates/exchange"}
 scrapper_engine = { path = "crates/scrapper_engine"}
 db = { path = "crates/db" }
+api = { path = "crates/api" }
 
 tokio = { version = "1.47.1", features = ["rt", "rt-multi-thread", "macros"] }
 rustls = { version = "0.23.32", features = ["ring"] }
 dotenv = "0.15.0"
+axum = "0.8.6"
