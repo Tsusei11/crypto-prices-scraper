@@ -1,4 +1,4 @@
-# Crypto Market Data Scraper 
+# Crypto Prices Scraper 
 
 A high-performance data scraper and API for cryptocurrency markets, written entirely in Rust.
 
